@@ -1,49 +1,48 @@
+import socket
 import sys
 
 from loguru import logger
 
-
 import asyncio
 
 
-class EchoClientProtocol(asyncio.DatagramProtocol):
-    def __init__(self, loop):
-        self.loop = loop
-        self.transport = None
+async def get_async_stdin_reader():
+    loop = asyncio.get_event_loop()
 
-    def connection_made(self, transport):
-        self.transport = transport
-        logger.info('Initiated connection')
-
-    def datagram_received(self, data, addr):
-        logger.info(f"Received: {data} from {addr}")
-
-    def error_received(self, exc):
-        print('Error received:', exc)
+    reader = asyncio.StreamReader()
+    w_protocol = asyncio.StreamReaderProtocol(reader)
+    connect = loop.connect_read_pipe(lambda: w_protocol, sys.stdin)
+    read_transport, read_protocol = await loop.create_task(connect)
+    return reader
 
 
-loop = asyncio.get_event_loop()
-connect = loop.create_datagram_endpoint(
-    lambda: EchoClientProtocol(loop),
-    remote_addr=('127.0.0.1', 333),
-    local_addr=('127.0.0.1', 12345)
-)
-udp_transport, udp_protocol = loop.run_until_complete(connect)
+def get_udp_transport():
+    client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    client.bind(('0.0.0.0', 12345))
+    client.setblocking(False)
+    return client
 
-reader = asyncio.StreamReader()
-w_protocol = asyncio.StreamReaderProtocol(reader)
-connect = loop.connect_read_pipe(lambda: w_protocol, sys.stdin)
-read_transport, read_protocol = loop.run_until_complete(connect)
+
+async def handle_server_responses(client):
+    loop = asyncio.get_event_loop()
+    while True:
+        data, addr = await loop.sock_recvfrom(client, 255)
+        logger.debug(f"Received {data} from {addr}")
+
 
 async def main():
+    reader = await get_async_stdin_reader()
+    client = get_udp_transport()
+
+    loop = asyncio.get_event_loop()
+
+    loop.create_task(handle_server_responses(client))
+
     while True:
         res = await reader.read(255)
         if not res:
             continue
 
-        await loop.sock_sendto(udp_transport, res, ('127.0.0.1', 333))
+        await loop.sock_sendto(client, res, ('127.0.0.1', 333))
 
-loop.run_until_complete(main())
-loop.run_forever()
-udp_transport.close()
-loop.close()
+asyncio.run(main())
