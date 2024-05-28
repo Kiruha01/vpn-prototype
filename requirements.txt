@@ -1,1 +1,2 @@
 loguru==0.7.2
+python-pytun==2.4.1
