@@ -9,21 +9,19 @@ import asyncio
 from pypacker.layer3.ip import IP
 from pytun import TunTapDevice
 
-def init_tun():
-    rnd = random.randint(0, 100)
-    tun = TunTapDevice(name="test" + str(rnd))
+def init_tun(comp_num: int):
+    tun = TunTapDevice(name="test" + str(comp_num))
 
-    tun.addr = "10.10.10." + str(rnd)
+    tun.addr = "10.10.10." + str(comp_num)
     tun.netmask = "255.255.255.0"
     tun.mtu = 1500
     tun.persist(False)
     tun.up()
 
-    print("Random:", rnd)
+    logger.info(f"Created tun: {tun.name} on 10.10.10.{comp_num}")
 
     return tun
 
-tun = init_tun()
 
 async def get_async_stdin_reader():
     loop = asyncio.get_event_loop()
@@ -50,6 +48,7 @@ def get_udp_transport():
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     client.bind(('0.0.0.0', 12346))
     client.setblocking(False)
+    logger.info(f"Listening UDP on 0.0.0.0:12346")
     return client
 
 
@@ -76,7 +75,7 @@ async def handle_server_responses(client, tun_wirter):
 
 
 
-async def main():
+async def main(server_ip, server_port):
     reader, writer = await get_async_tun_reader_writer()
     client = get_udp_transport()
 
@@ -95,9 +94,21 @@ async def main():
             continue
         ip = IP(res[4:])
         print(ip)
-        logger.debug(f"Sending ^ to 127.0.0.1:333")
-        await loop.sock_sendto(client, res, ('127.0.0.1', 333))
+        logger.debug(f"Sending ^ to {server_ip}:{server_port}")
+        await loop.sock_sendto(client, res, (server_ip, server_port))
 
-asyncio.run(main())
+if __name__ == "__main__":
 
-tun.down()
+    if len(sys.argv) < 2:
+        print("Usage: python3 client.py <comp_num> <server address> <server port>")
+        exit(1)
+
+    comp_num = int(sys.argv[1])
+    server_ip = sys.argv[2]
+    server_port = int(sys.argv[3])
+
+    tun = init_tun(comp_num)
+
+    asyncio.run(main(server_ip, server_port))
+
+    tun.down()

@@ -85,5 +85,7 @@ async def run_server():
                 logger.info(f"Found {ip.dst} in cache: {address_mapping[ip.dst]}")
                 await loop.sock_sendto(server, res, address_mapping[ip.dst])
                 logger.info(f"Sent {ip.higher_layer.__name__} packet to client")
+            else:
+                logger.info(f"Could not find {ip.dst} in cache. Skipping")
 
 asyncio.run(run_server())
