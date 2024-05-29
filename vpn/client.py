@@ -15,7 +15,7 @@ def init_tun(comp_num: int):
     tun.addr = "10.10.10." + str(comp_num)
     tun.netmask = "255.255.255.0"
     tun.mtu = 1500
-    tun.persist(False)
+    tun.persist(True)
     tun.up()
 
     logger.info(f"Created tun: {tun.name} on 10.10.10.{comp_num}")

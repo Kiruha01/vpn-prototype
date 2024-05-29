@@ -29,7 +29,7 @@ async def get_async_tun_reader_writer():
     r_protocol = asyncio.StreamReaderProtocol(reader)
     await loop.connect_read_pipe(lambda: r_protocol, tun)
     w_transport, w_protocol = await loop.connect_write_pipe(asyncio.streams.FlowControlMixin, tun)
-    writer = asyncio.StreamWriter(w_transport, w_protocol, reader, loop)
+    writer = asyncio.StreamWriter(w_transport, w_protocol, None, loop)
     return reader, writer
 
 
@@ -51,23 +51,16 @@ async def handle_udp_client(server, writer):
 
             writer.write(data)
             await writer.drain()
-            logger.info(f"Sent {ip.higher_layer.__name__} packet to net")
+
+            await send_packet(server, data, ip.dst)
+
+            logger.info(f"Sent {ip.higher_layer} packet to net")
 
         # await loop.sock_sendto(server, b"ok\n", addr)
 
 
-async def run_server():
-    server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    server.bind(('0.0.0.0', 333))
-    server.setblocking(False)
-
-    reader, writer = await get_async_tun_reader_writer()
-
+async def proccss_tun_packet(server, reader):
     loop = asyncio.get_event_loop()
-
-    logger.info(f"Listening on {server.getsockname()}")
-
-    loop.create_task(handle_udp_client(server, writer))
 
     while True:
         while True:
@@ -81,11 +74,38 @@ async def run_server():
                 continue
             ip = IP(res[4:])
             print(ip)
-            if ip.dst in address_mapping:
-                logger.info(f"Found {ip.dst} in cache: {address_mapping[ip.dst]}")
-                await loop.sock_sendto(server, res, address_mapping[ip.dst])
-                logger.info(f"Sent {ip.higher_layer.__name__} packet to client")
-            else:
-                logger.info(f"Could not find {ip.dst} in cache. Skipping")
+            await send_packet(server, res, ip.src)
+            # if ip.dst in address_mapping:
+            #     logger.info(f"Found {ip.dst} in cache: {address_mapping[ip.dst]}")
+            #     await loop.sock_sendto(server, res, address_mapping[ip.dst])
+            #     logger.error(f"Sent {ip.higher_layer} packet to client")
+            # else:
+            #     logger.error(f"Could not find {ip.dst} in cache. Skipping")
+
+
+async def send_packet(server, data, dst):
+    loop = asyncio.get_event_loop()
+
+    if dst in address_mapping:
+        logger.info(f"Found {dst} in cache: {address_mapping[dst]}")
+        await loop.sock_sendto(server, data, address_mapping[dst])
+        logger.error(f"Sent packet to client")
+    else:
+        logger.error(f"Could not find {dst} in cache. Skipping")
+
+async def run_server():
+    server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server.bind(('', 3333))
+    server.setblocking(False)
+
+    reader, writer = await get_async_tun_reader_writer()
+
+    loop = asyncio.get_event_loop()
+
+    logger.info(f"Listening on {server.getsockname()}")
+
+    loop.create_task(proccss_tun_packet(server, reader))
+
+    await handle_udp_client(server, writer)
 
 asyncio.run(run_server())
