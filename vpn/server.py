@@ -38,13 +38,13 @@ async def handle_udp_client(server, writer):
 
     while True:
         # Accept new connections
-        data, addr = await loop.sock_recvfrom(server, 255)
+        data, addr = await loop.sock_recvfrom(server, 2500)
         logger.debug(f"Process {addr} client")
         if data[4:5] == b"E":
             # if IP protocol
             ip = IP(data[4:])
             print(ip)
-            logger.debug(f"Received {ip.higher_layer} from {addr}")
+            logger.debug(f"Received {ip} from {addr}")
 
             address_mapping[ip.src] = addr
             logger.debug(f"Saved {ip.src} -> {addr}")
@@ -54,7 +54,7 @@ async def handle_udp_client(server, writer):
 
             await send_packet(server, data, ip.dst)
 
-            logger.info(f"Sent {ip.higher_layer} packet to net")
+            logger.info(f"Sent {ip} packet to net")
 
         # await loop.sock_sendto(server, b"ok\n", addr)
 
@@ -64,7 +64,7 @@ async def proccss_tun_packet(server, reader):
 
     while True:
         while True:
-            res = await reader.read(1500)
+            res = await reader.read(2500)
             if not res:
                 continue
 
@@ -74,7 +74,7 @@ async def proccss_tun_packet(server, reader):
                 continue
             ip = IP(res[4:])
             print(ip)
-            await send_packet(server, res, ip.src)
+            await send_packet(server, res, ip.dst)
             # if ip.dst in address_mapping:
             #     logger.info(f"Found {ip.dst} in cache: {address_mapping[ip.dst]}")
             #     await loop.sock_sendto(server, res, address_mapping[ip.dst])
@@ -103,6 +103,7 @@ async def run_server():
     loop = asyncio.get_event_loop()
 
     logger.info(f"Listening on {server.getsockname()}")
+
 
     loop.create_task(proccss_tun_packet(server, reader))
 
